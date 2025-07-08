@@ -1,12 +1,13 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler, PowerTransformer
-from sdv.single_table import CTGANSynthesizer
+from sdv.single_table import GaussianCopulaSynthesizer
+from sdv.metadata import SingleTableMetadata
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
 
 
-class DataLoader:
+class DataFrameLoader:
     def __init__(self):
         self.trainData = pd.read_csv(r'dataset\train.csv')
         self.testData = pd.read_csv(r'dataset\test.csv')
@@ -44,9 +45,11 @@ class DataLoader:
         return transformed_data, transformer
             
     @staticmethod
-    def generate_synthetic_data(dataframe, no_of_samples=1000):
+    def generate_synthetic_data(dataframe, no_of_samples=2000):
         print('Generating Synthetic Data...')
-        synthesizer = CTGANSynthesizer()
+        metadata = SingleTableMetadata()
+        metadata.detect_from_dataframe(dataframe)
+        synthesizer = GaussianCopulaSynthesizer()
         synthesizer.fit(dataframe)
 
         return synthesizer.sample(no_of_samples)
