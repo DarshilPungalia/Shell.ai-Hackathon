@@ -74,5 +74,5 @@ class TabPFNPipeline:
 
 
 if __name__ == "__main__":
-    model = TabPFNPipeline(output_type='median')
-    model.get_submission(os.path.join('submissions', 'tabpfn_median.csv'))
+    model = TabPFNPipeline(output_type='mean')
+    model.get_submission(os.path.join('submissions', 'tabpfn_mean.csv'))
