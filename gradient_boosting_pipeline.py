@@ -146,8 +146,10 @@ class GradientBoostingPipeline:
     def get_submission(self, path):
         preds = []
         for model in tqdm(self.models, desc='Generating Predictions for each Blend', total=len(self.models)):
-            pred = model.predict(self.x_test)
-            print(f'{type(pred)} {pred.shape}')
+            if type(model) is CatBoostRegressor:
+                pred = model.predict(self.x_test, prediction_type='RMSEWithUncertainty')[:, 0]
+            else:
+                pred = model.predict(self.x_test)
             preds.append(pred)
         
         preds = np.column_stack(preds)
