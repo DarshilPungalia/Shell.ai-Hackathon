@@ -1,6 +1,7 @@
 import pandas as pd
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
 from sklearn.metrics import mean_absolute_percentage_error as mape
 from sklearn.model_selection import KFold
 import numpy as np
@@ -15,21 +16,32 @@ warnings.filterwarnings(action='ignore')
 class GradientBoostingPipeline:
     def __init__(self, regressor = None):
         self.regressor = regressor or XGBRegressor
-        self.config = {'tree_method': 'hist',
-                        'device': 'cuda',
-                        'objective': 'reg:squarederror',
-                        'metric':'rmse',
-                        'random_state': 12
-                        } if self.regressor is XGBRegressor else {
-                                                                            'boosting_type': 'gbdt',
-                                                                            'objective': 'regression',
-                                                                            'metric': 'rmse',
-                                                                            'random_state': 12,
-                                                                            'device': 'gpu',
-                                                                            'gpu_use_dp': False,  
-                                                                            'max_bin': 255,
-                                                                            'verbose':-1
-                                                                        }
+        if self.regressor is XGBRegressor:
+            self.config = {'tree_method': 'hist',
+                            'device': 'cuda',
+                            'objective': 'reg:squarederror',
+                            'metric':'rmse',
+                            'random_state': 12
+                            }  
+        elif self.regressor is LGBMRegressor: 
+            self.config = {'boosting_type': 'gbdt',
+                            'objective': 'regression',
+                            'metric': 'rmse',
+                            'random_state': 12,
+                            'device': 'gpu',
+                            'gpu_use_dp': False,  
+                            'max_bin': 255,
+                            'verbose':-1
+                            }
+        elif self.regressor is CatBoostRegressor:
+            self.config = {
+                            'task_type': 'GPU',
+                            'devices': '0',
+                            'loss_function': 'RMSEWithUncertainty',
+                            'random_seed': 12,
+                            'verbose': 0
+                        }
+                                                                    
         self.models = []
         self.best_params = []
         self.labels = ['BlendProperty1', 'BlendProperty2', 'BlendProperty3', 'BlendProperty4', 'BlendProperty5', 
@@ -40,25 +52,45 @@ class GradientBoostingPipeline:
         self.train()
 
     def objective(self, trial):
-        params = {
-            'n_estimators': trial.suggest_int('n_estimators', 100, 500),
-            'max_depth': trial.suggest_int('max_depth', 3, 10),
-            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-            'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-            'reg_alpha': trial.suggest_float('reg_alpha', 0, 10),
-            'reg_lambda': trial.suggest_float('reg_lambda', 0, 10)
-        } if self.regressor is XGBRegressor else {
-                                                                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                                                                'n_estimators': trial.suggest_int('n_estimators', 50, 300),
-                                                                'max_depth': trial.suggest_int('max_depth', 3, 8),
-                                                                'num_leaves': trial.suggest_int('num_leaves', 8, 64),
-                                                                'min_child_samples': trial.suggest_int('min_child_samples', 2, 15),
-                                                                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                                                                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                                                                'reg_alpha': trial.suggest_float('reg_alpha', 0.0, 10.0),
-                                                                'reg_lambda': trial.suggest_float('reg_lambda', 0.0, 10.0)
-                                                            }
+        if self.regressor is XGBRegressor:
+            params = {
+                'n_estimators': trial.suggest_int('n_estimators', 100, 500),
+                'max_depth': trial.suggest_int('max_depth', 3, 10),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'reg_alpha': trial.suggest_float('reg_alpha', 0, 10),
+                'reg_lambda': trial.suggest_float('reg_lambda', 0, 10)
+            }
+
+        elif self.regressor is LGBMRegressor:
+            params = {
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                'n_estimators': trial.suggest_int('n_estimators', 50, 300),
+                'max_depth': trial.suggest_int('max_depth', 3, 8),
+                'num_leaves': trial.suggest_int('num_leaves', 8, 64),
+                'min_child_samples': trial.suggest_int('min_child_samples', 2, 15),
+                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                'reg_alpha': trial.suggest_float('reg_alpha', 0.0, 10.0),
+                'reg_lambda': trial.suggest_float('reg_lambda', 0.0, 10.0)
+            }
+
+        elif self.regressor is CatBoostRegressor:
+            params = {
+                'iterations': trial.suggest_int('iterations', 300, 1000),
+                'depth': trial.suggest_int('depth', 4, 10),
+                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2, log=True),
+                'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 3.0, 100.0, log=True),
+                'random_strength': trial.suggest_float('random_strength', 1e-9, 10.0, log=True),
+                'bagging_temperature': trial.suggest_float('bagging_temperature', 0.0, 1.0),
+                'border_count': trial.suggest_int('border_count', 32, 255),
+                'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise']),
+                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
+            }
+
+        else:
+            raise ValueError("Unsupported regressor")
         
         cv_scores = []
         skf = KFold(n_splits=3, shuffle=True, random_state=42)
@@ -69,9 +101,13 @@ class GradientBoostingPipeline:
             y_train, y_val = self.y[train_idx], self.y[val_idx]
             
             model = self.regressor(**self.config ,**params)
+            
             model.fit(x_train, y_train)
             
-            pred = model.predict(x_val)
+            if type(model) is CatBoostRegressor:
+                pred = model.predict(x_val, prediction_type='RMSEWithUncertainty')[:, 0]
+            else:
+                pred = model.predict(x_val)
             score = mape(y_val, pred)
             cv_scores.append(score)
         
@@ -128,5 +164,5 @@ class GradientBoostingPipeline:
 
 
 if __name__ == "__main__":
-    model = GradientBoostingPipeline(regressor=LGBMRegressor)
-    model.get_submission(os.path.join('submissions', 'xgb.csv'))
+    model = GradientBoostingPipeline(regressor=CatBoostRegressor)
+    model.get_submission(os.path.join('submissions', 'cat_dist.csv'))

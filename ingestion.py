@@ -1,10 +1,7 @@
 import pandas as pd
-import numpy as np
-from sklearn.preprocessing import MinMaxScaler, PowerTransformer
+from sklearn.preprocessing import PowerTransformer
 from sdv.single_table import GaussianCopulaSynthesizer
 from sdv.metadata import SingleTableMetadata
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
 
 
 class DataFrameLoader:
