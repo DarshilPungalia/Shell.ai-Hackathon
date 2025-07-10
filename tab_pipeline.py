@@ -3,6 +3,7 @@ from tabpfn import TabPFNRegressor
 from sklearn.metrics import mean_absolute_percentage_error as mape
 from sklearn.metrics import r2_score as r2
 from sklearn.model_selection import train_test_split
+from sklearn.multioutput import RegressorChain
 import numpy as np
 from ingestion import DataFrameLoader
 from huggingface_hub import hf_hub_download
@@ -73,6 +74,94 @@ class TabPFNPipeline:
         print('Predictions Saved')
 
 
+class TabPFNChainsPipeline:
+    def __init__(self, output_type: Literal['mean', 'median', 'mode'] = None):
+        self.output_type = output_type or 'mean'
+        self.model = None
+        self.labels = ['BlendProperty1', 'BlendProperty2', 'BlendProperty3', 'BlendProperty4', 'BlendProperty5', 
+                       'BlendProperty6', 'BlendProperty7', 'BlendProperty8', 'BlendProperty9','BlendProperty10']
+        
+        self.chain_order = [2, 0, 3, 5, 7, 8, 1, 6, 9, 4] 
+        
+        self.loader = DataFrameLoader()
+        print('Downloading Model from HuggingFace...')
+        self.path = hf_hub_download(repo_id='Prior-Labs/TabPFN-v2-reg',
+                               filename='tabpfn-v2-regressor.ckpt',
+                               cache_dir=r'models')
+        print(f'Model saved at {self.path}')
+        self.regressor = TabPFNRegressor
+        self.train()
+
+    def train(self):
+        self.x, self.y, self.x_test = self.loader.load()
+        
+        print(f'Combined target shape: {self.y.shape}')
+        
+        x_train, x_val, y_train, y_val = train_test_split(self.x, self.y, test_size=0.2, random_state=69)
+        
+        print(f'Shape of x_train: {x_train.shape}')
+        print(f'Shape of x_val: {x_val.shape}')
+        print(f'Shape of y_train: {y_train.shape}')
+        print(f'Shape of y_val: {y_val.shape}')
+        
+        base_estimator = self.regressor(
+            device='auto', 
+            model_path=r'models\models--Prior-Labs--TabPFN-v2-reg\snapshots\213f8e38ec399a2a385fa46cab6f22b95cd90de8\tabpfn-v2-regressor.ckpt'
+        )
+        
+        print('Training Regressor Chain with TabPFN...')
+        self.model = RegressorChain(base_estimator, order=self.chain_order, random_state=69)
+        self.model.fit(x_train, y_train)
+        
+        val_preds = self.model.predict(x_val)
+        print(f'Validation predictions shape: {val_preds.shape}')
+        
+        overall_mape = 0
+        overall_r2 = 0
+        
+        print("\n=== Validation Results ===")
+        for i, label in enumerate(self.labels):
+            target_mape = mape(y_val[:, i], val_preds[:, i])
+            target_r2 = r2(y_val[:, i], val_preds[:, i])
+            
+            print(f'{label}: MAPE={target_mape:.4f}, R2={target_r2:.4f}')
+            overall_mape += target_mape
+            overall_r2 += target_r2
+        
+        avg_mape = overall_mape / len(self.labels)
+        avg_r2 = overall_r2 / len(self.labels)
+        
+        print(f"\n=== Overall Performance ===")
+        print(f'Average MAPE: {avg_mape:.4f}')
+        print(f'Average R2: {avg_r2:.4f}')
+        
+        print(f'Finished Training Regressor Chain with TabPFN')
+
+    def get_submission(self, path):
+        print(f'Generating Predictions using Regressor Chain with {self.output_type}...')
+        
+        preds = self.model.predict(self.x_test)
+        print(f'Test predictions shape: {preds.shape}')
+        
+        preds = self.loader.get_transformers().inverse_transform(preds)
+        
+        submission = pd.DataFrame(data=range(1, 501), columns=['ID'], index=None)
+        submission[self.labels] = preds
+        
+        print(f'Saving Predictions to {path}')
+        submission.to_csv(path, index=False)
+        print('Predictions Saved')
+
+    def get_chain_order_info(self):
+        """Print the chain order for reference"""
+        print("\n=== Chain Order ===")
+        for i, idx in enumerate(self.chain_order):
+            print(f"Step {i+1}: {self.labels[idx]}")
+
+
 if __name__ == "__main__":
-    model = TabPFNPipeline(output_type='mean')
-    model.get_submission(os.path.join('submissions', 'tabpfn_mean.csv'))
+    '''model = TabPFNPipeline(output_type='mean')
+    model.get_submission(os.path.join('submissions', 'tabpfn_mean.csv'))'''
+    model = TabPFNChainsPipeline(output_type='mean')
+    model.get_chain_order_info()
+    model.get_submission(os.path.join('submissions', 'tabpfn_chains_mean.csv'))
