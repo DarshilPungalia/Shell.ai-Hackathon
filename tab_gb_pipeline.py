@@ -17,9 +17,10 @@ import optuna
 
 warnings.filterwarnings(action='ignore')
 
-class TabPFNQuantileGBPipeline:
-    def __init__(self, output_type: Literal['mean', 'median', 'mode'] = None, meta_model = None):
+class TabPFNStackingPipeline:
+    def __init__(self, output_type: Literal['mean', 'median', 'mode'] = None, meta_model = None, combine_features: bool = False):
         self.meta_model = meta_model or XGBRegressor
+        self.combine_features = combine_features
         self.output_type = output_type or 'mean'
         self.tabpfn_models = []
         self.meta_models = []
@@ -59,10 +60,13 @@ class TabPFNQuantileGBPipeline:
             return {
                     'task_type': 'GPU',
                     'devices': '0',
-                    'loss_function': 'RMSEWithUncertainty',
+                    'loss_function': 'RMSE',
                     'random_seed': 12,
                     'verbose': 0
                     }
+        elif model is TabPFNRegressor:
+            return None
+        
         else:
             raise ValueError(f'No meta model of type {model}')
 
@@ -133,8 +137,8 @@ class TabPFNQuantileGBPipeline:
         skf = KFold(n_splits=3, shuffle=True, random_state=42)
         
 
-        for train_idx, val_idx in skf.split(self.train_quantile_features, self.y_train):
-            x_train, x_val = self.train_quantile_features[train_idx], self.train_quantile_features[val_idx]
+        for train_idx, val_idx in skf.split(self.trainData, self.y_train):
+            x_train, x_val = self.trainData[train_idx], self.trainData[val_idx]
             y_train, y_val = self.y_train[train_idx], self.y_train[val_idx]
             
             model = self.meta_model(**self.config ,**params)
@@ -180,38 +184,55 @@ class TabPFNQuantileGBPipeline:
             print("Step 1: Training TabPFN model...")
             tabpfn_model = self.regressor(
                 device='auto', 
-                model_path=r'models\models--Prior-Labs--TabPFN-v2-reg\snapshots\213f8e38ec399a2a385fa46cab6f22b95cd90de8\tabpfn-v2-regressor.ckpt'
+                model_path=self.path
             )
             tabpfn_model.fit(x_train, self.y_train)
             self.tabpfn_models.append(tabpfn_model)
 
             # Step 2: Generate quantile features for training meta
             print("Step 2: Generating quantile features...")
-            self.train_quantile_features = self.get_quantile_features(tabpfn_model, x_train)
+            train_quantile_features = self.get_quantile_features(tabpfn_model, x_train)
             val_quantile_features = self.get_quantile_features(tabpfn_model, x_val)
+
+            self.trainData = train_quantile_features if not self.combine_features else np.hstack([x_train, train_quantile_features])
+            valData = val_quantile_features if not self.combine_features else np.hstack([x_val, val_quantile_features])
             
-            print(f'Train quantile features shape: {self.train_quantile_features.shape}')
-            print(f'Val quantile features shape: {val_quantile_features.shape}')
+            print(f'Train quantile features shape: {self.trainData.shape}')
+            print(f'Val quantile features shape: {valData.shape}')
 
-            # Step 3: Optimize meta model
-            print("Step 3: Optimizing Meta Model model...")
-            params = self.optimize()
+            if not self.meta_model == TabPFNRegressor:
+                print("Step 3: Optimizing Meta Model model...")
+                params = self.optimize()
 
-            # Step 4: Train meta model
-            print("Step 4: Training Meta Model model...")
-            model = self.meta_model(
-                **self.config,
-                **params
-            )
+                print("Step 4: Training Meta Model model...")
+                model = self.meta_model(
+                    **self.config,
+                    **params
+                )
+
+                model.fit(
+                    self.trainData, self.y_train
+                )
+                
+                self.meta_models.append(model)
+
+                print("Step 5: Validating combined model...")
+                val_preds = model.predict(valData)
             
-            model.fit(
-                self.train_quantile_features, self.y_train,
-            )
-            self.meta_models.append(model)
+            else:
+                print("Step 3: Training Meta Model")
+                model = self.regressor(device='auto', 
+                                       model_path=self.path
+                                    )
+            
+                model.fit(
+                    self.trainData, self.y_train
+                )
+                
+                self.meta_models.append(model)
 
-            # Step 5: Validate the combined model
-            print("Step 4: Validating combined model...")
-            val_preds = model.predict(val_quantile_features)
+                print("Step 4: Validating combined model...")
+                val_preds = model.predict(valData)
             
             val_mape = mape(y_val, val_preds)
             val_r2 = r2(y_val, val_preds)
@@ -249,9 +270,14 @@ class TabPFNQuantileGBPipeline:
             
             # Generate quantile features for test set
             test_quantile_features = self.get_quantile_features(tabpfn_model, self.x_test)
+
+            if self.combine_features:
+                testData = np.hstack([self.x_test, test_quantile_features])
+            else:
+                testData = test_quantile_features
             
             # Make final prediction with Meta Model
-            pred = model.predict(test_quantile_features)
+            pred = model.predict(testData) if not self.meta_model == TabPFNRegressor else model.predict(testData, output_type=self.output_type)
             preds.append(pred)
         
         preds = np.column_stack(preds)
@@ -271,5 +297,5 @@ class TabPFNQuantileGBPipeline:
 
 if __name__ == "__main__":    
     print("=== Training Individual TabPFN + Meta Models ===")
-    model1 = TabPFNQuantileGBPipeline()
+    model1 = TabPFNStackingPipeline(meta_model=XGBRegressor)
     model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_xgb.csv'))
