@@ -1,5 +1,5 @@
 import pandas as pd
-from xgboost import XGBRegressor
+from xgboost import XGBRegressor, DMatrix
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 from sklearn.metrics import mean_absolute_percentage_error as mape
@@ -14,7 +14,8 @@ import warnings
 warnings.filterwarnings(action='ignore')
 
 class GradientBoostingPipeline:
-    def __init__(self, regressor = None):
+    def __init__(self, regressor = None, n_trials = 20):
+        self.n_trials = n_trials
         self.regressor = regressor or XGBRegressor
         if self.regressor is XGBRegressor:
             self.config = {'tree_method': 'hist',
@@ -113,11 +114,10 @@ class GradientBoostingPipeline:
         
         return np.mean(cv_scores)
     
-    def optimize_hp(self, n_trials=25):
-        
+    def optimize_hp(self):
         study = optuna.create_study(direction='minimize')
         print('Optimizing HyperParameter...')
-        study.optimize(self.objective, n_trials=n_trials)
+        study.optimize(self.objective, n_trials=self.n_trials)
         print(f'Best trial was with MAPE: {study.best_value}')
         
         self.best_params.append(study.best_params)
@@ -163,6 +163,25 @@ class GradientBoostingPipeline:
         print(f'Saving Predictions to {path}')
         submission.to_csv(path, index=False)
         print('Predictions Saved')
+    
+    def get_leaves(self):
+        preds = []
+        for model in tqdm(self.models, desc='Extracting Leaves for each Blend', total=len(self.models)):
+            if type(model) is CatBoostRegressor:
+                pred = model.predict(self.x, prediction_type='LeafIndex')[:, 0]
+            elif type(model) is XGBRegressor:
+                booster = model.get_booster()
+                dmat = DMatrix(self.x)
+
+                pred = booster.predict(dmat, pred_leaf=True)
+
+            elif type(model) is LGBMRegressor:
+                pred = model.predict(self.x_test, pred_leaf=True)
+            else:
+                raise RuntimeError('Can not get Leaf Indicies')
+            preds.append(pred)
+    
+        return preds
 
 
 if __name__ == "__main__":
