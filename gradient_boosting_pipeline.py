@@ -10,6 +10,7 @@ import optuna
 from tqdm import tqdm
 import os
 import warnings
+import sys
 
 warnings.filterwarnings(action='ignore')
 
@@ -123,7 +124,7 @@ class GradientBoostingPipeline:
         self.best_params.append(study.best_params)
 
     def train(self):
-        pbar = tqdm(zip(self.y_split, self.best_params, self.labels), total=len(self.best_params), desc=f'Training {self.regressor.__name__}')
+        pbar = tqdm(zip(self.y_split, self.best_params, self.labels), total=len(self.best_params), desc=f'Training {self.regressor.__name__}', file=sys.stdout, dynamic_ncols=True)
         for y, params, label in pbar:
             pbar.set_description(f'Training {self.regressor.__name__} for {label}')
             print(f'Shape of target: {y.shape}')
@@ -137,7 +138,7 @@ class GradientBoostingPipeline:
         self.x, self.y_split, self.x_test = self.loader.load(split_labels=True)
         print(type(self.y_split))
 
-        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.labels), desc=f'Optimizing {self.regressor.__name__}')
+        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.labels), desc=f'Optimizing {self.regressor.__name__}', file=sys.stdout, dynamic_ncols=True)
         for value, label in pbar:
             pbar.set_description(f'Optimizing {self.regressor.__name__} for {label}')
             self.y = value
@@ -166,22 +167,25 @@ class GradientBoostingPipeline:
     
     def get_leaves(self):
         preds = []
-        for model in tqdm(self.models, desc='Extracting Leaves for each Blend', total=len(self.models)):
-            if type(model) is CatBoostRegressor:
-                pred = model.predict(self.x, prediction_type='LeafIndex')[:, 0]
-            elif type(model) is XGBRegressor:
+        tests = []
+        for model in tqdm(self.models, desc='Extracting Leaves for each Blend', total=len(self.models), file=sys.stdout, dynamic_ncols=True):
+            if type(model) is XGBRegressor:
                 booster = model.get_booster()
                 dmat = DMatrix(self.x)
+                testmat  = DMatrix(self.x_test)
 
                 pred = booster.predict(dmat, pred_leaf=True)
+                test = booster.predict(testmat, pred_leaf=True)
 
             elif type(model) is LGBMRegressor:
-                pred = model.predict(self.x_test, pred_leaf=True)
+                pred = model.predict(self.x, pred_leaf=True)
+                test = model.predict(testmat, pred_leaf=True)
             else:
                 raise RuntimeError('Can not get Leaf Indicies')
             preds.append(pred)
+            tests.append(test)
     
-        return preds
+        return preds, tests
 
 
 if __name__ == "__main__":
