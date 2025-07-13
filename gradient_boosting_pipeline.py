@@ -179,13 +179,13 @@ class GradientBoostingPipeline:
 
             elif type(model) is LGBMRegressor:
                 pred = model.predict(self.x, pred_leaf=True)
-                test = model.predict(testmat, pred_leaf=True)
+                test = model.predict(self.x_test, pred_leaf=True)
             else:
                 raise RuntimeError('Can not get Leaf Indicies')
             preds.append(pred)
             tests.append(test)
     
-        return preds, tests
+        return preds, tests, self.y_split
 
 
 if __name__ == "__main__":
