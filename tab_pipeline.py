@@ -160,8 +160,8 @@ class TabPFNChainsPipeline:
 
 
 if __name__ == "__main__":
-    '''model = TabPFNPipeline(output_type='mean')
-    model.get_submission(os.path.join('submissions', 'tabpfn_mean.csv'))'''
-    model = TabPFNChainsPipeline(output_type='mean')
+    model = TabPFNPipeline(output_type='mean')
+    model.get_submission(os.path.join('submissions', 'tabpfn_mean.csv'))
+    '''model = TabPFNChainsPipeline(output_type='mean')
     model.get_chain_order_info()
-    model.get_submission(os.path.join('submissions', 'tabpfn_chains_mean.csv'))
+    model.get_submission(os.path.join('submissions', 'tabpfn_chains_mean.csv'))'''

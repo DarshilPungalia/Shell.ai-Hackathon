@@ -256,7 +256,7 @@ class TabPFNStackingPipeline:
         
         print(f'\nFinished Training {len(self.tabpfn_models)} TabPFN models and {len(self.meta_models)} Meta Model models')
 
-    def get_submission(self, path):
+    def get_submission(self, path, only_preds: bool = False):
         print(f'Generating Predictions using TabPFN quantiles + Meta Model...')
         
         preds = []
@@ -286,6 +286,9 @@ class TabPFNStackingPipeline:
         # Inverse transform predictions
         preds = self.loader.get_transformers().inverse_transform(preds)
 
+        if only_preds:
+            return preds
+
         # Create submission dataframe
         submission = pd.DataFrame(data=range(1, 501), columns=['ID'], index=None)
         submission[self.labels] = preds
@@ -295,7 +298,7 @@ class TabPFNStackingPipeline:
         print('Predictions Saved')
 
 
-if __name__ == "__main__":    
-    print("=== Training Individual TabPFN + Meta Models ===")
+if __name__ == "__main__":   
+    print("=== Training Individual TabPFN + XGB Models ===")
     model1 = TabPFNStackingPipeline(meta_model=XGBRegressor)
     model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_xgb.csv'))

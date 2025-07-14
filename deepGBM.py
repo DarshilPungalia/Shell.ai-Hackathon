@@ -1,14 +1,12 @@
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
-from tabpfn import TabPFNRegressor
 import tensorflow as tf
 import pandas as pd
 import numpy as np
-from sklearn.metrics import mean_absolute_percentage_error as mape
+import os
 from ingestion import DataFrameLoader
 from gradient_boosting_pipeline import GradientBoostingPipeline
 from tqdm import tqdm
-from sklearn.preprocessing import OneHotEncoder
 
 class GradientBoosting:
     def __init__(self, gradient_boosting_models: list | type = None):
@@ -40,7 +38,7 @@ class GradientBoosting:
         forest, test_forest = [], []
         if isinstance(self.gradient_models, list):
             for booster in tqdm(self.gradient_models, desc='Extracting Leaves', total=len(self.gradient_models)):
-                model = GradientBoostingPipeline(regressor=booster, n_trials=1)
+                model = GradientBoostingPipeline(regressor=booster, n_trials=30)
                 trees, test_trees, y = model.get_leaves()
                 print(f'Shape of Trees is {trees[0].shape}')
                 forest.append(trees)
@@ -50,7 +48,7 @@ class GradientBoosting:
             forest, test_forest = self.combineBlendLeaves(forest), self.combineBlendLeaves(test_forest)
         
         elif self.gradient_models in (XGBRegressor, LGBMRegressor):
-            model = GradientBoostingPipeline(regressor=self.gradient_models, n_trials=1)
+            model = GradientBoostingPipeline(regressor=self.gradient_models, n_trials=30)
             trees, test_trees, y = model.get_leaves()
             print(f'Shape of Trees is {trees[0].shape}.')
             forest.append(trees)
@@ -70,22 +68,25 @@ class DeepNet:
 
     def build_model(self, leaf_inputs, num_outputs, embedding_dim=64, dropout_rate=0.2):
         self.num_models = len(leaf_inputs)
-        num_trees_per_model = leaf_inputs[0].shape[1]
-        max_leaf_index = max([leaf.max() for leaf in leaf_inputs]) + 1  
+        max_leaf_index = int(max([leaf.max() for leaf in leaf_inputs])) + 1  
 
         model_inputs = []
         model_embeddings = []
 
         for i in range(self.num_models):
-            inp = tf.keras.layers.Input(shape=(num_trees_per_model,), dtype='int32', name=f'model_{i}_input')
+            num_trees_this_model = leaf_inputs[i].shape[1]
+            print(f"Model {i}: {num_trees_this_model} trees")
+            
+            inp = tf.keras.layers.Input(shape=(num_trees_this_model,), dtype='int32', name=f'model_{i}_input')
             emb = tf.keras.layers.Embedding(input_dim=max_leaf_index, output_dim=embedding_dim, name=f'model_{i}_embed')(inp)
             pooled = tf.keras.layers.GlobalAveragePooling1D(name=f'model_{i}_pool')(emb)  
             model_inputs.append(inp)
             model_embeddings.append(pooled)
 
+
         # Concatenate embeddings from all models
         x = tf.keras.layers.Concatenate(name='concat_embeddings')(model_embeddings)        
-        x = tf.keras.layers.Dense(64, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
+        x = tf.keras.layers.Dense(16, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(1e-4))(x)
         x = tf.keras.layers.Dropout(dropout_rate)(x)
         out = tf.keras.layers.Dense(num_outputs, name='output')(x)
 
@@ -93,6 +94,7 @@ class DeepNet:
         return model
     
     def train(self, leaf_inputs, y):
+        leaf_inputs = [leaf.astype(np.int32) for leaf in leaf_inputs]
         model = self.build_model(leaf_inputs, num_outputs=self.num_outputs)
         model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
                       loss='mse',
@@ -101,13 +103,12 @@ class DeepNet:
         model.summary()
 
         print('Training DNN...')
-        callbacks = [tf.keras.callbacks.EarlyStopping(patience=10, monitor='val_mape', restore_best_weights=True, min_delta=0.001)]
+        callbacks = [tf.keras.callbacks.EarlyStopping(patience=3, monitor='val_loss', restore_best_weights=True, min_delta=0.001)]
         model.fit(leaf_inputs,
                     y,
                     validation_split=0.25,
                     epochs=30,
                     batch_size=16,
-                    verbose=False,
                     callbacks=callbacks)
         
         self.model = model
@@ -133,6 +134,8 @@ class DeepGBM:
         gradient_booster = GradientBoosting(gradient_boosting_models=self.gradient_models)
         x, y, self.x_test = gradient_booster.gradientBoosting()
 
+        y = np.column_stack(y)
+
         print('Training the Neural Net on leaves...')
         self.model = DeepNet(num_outputs=10)
         self.model.train(x, y)
@@ -140,11 +143,13 @@ class DeepGBM:
     def predict(self):
         return self.model.predict(self.x_test)
 
-    
-    
-
 if __name__ == "__main__":
     models = [XGBRegressor, LGBMRegressor]
     deep_gbm = DeepGBM(gradient_models=models, num_outputs=10)
     history = deep_gbm.train()
     predictions = deep_gbm.predict()
+    
+    submission = pd.DataFrame(data=range(1, 501), columns=['ID'])
+
+    submission[[f'BlendProperty{i+1}' for i in range(10)]] = predictions
+    submission.to_csv(os.path.join('submissions', 'deepgbm.csv'), index=False)

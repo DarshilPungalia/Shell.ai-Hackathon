@@ -15,7 +15,7 @@ import sys
 warnings.filterwarnings(action='ignore')
 
 class GradientBoostingPipeline:
-    def __init__(self, regressor = None, n_trials = 20):
+    def __init__(self, regressor = None, n_trials:int = 20):
         self.n_trials = n_trials
         self.regressor = regressor or XGBRegressor
         if self.regressor is XGBRegressor:
@@ -124,7 +124,7 @@ class GradientBoostingPipeline:
         self.best_params.append(study.best_params)
 
     def train(self):
-        pbar = tqdm(zip(self.y_split, self.best_params, self.labels), total=len(self.best_params), desc=f'Training {self.regressor.__name__}', file=sys.stdout, dynamic_ncols=True)
+        pbar = tqdm(zip(self.y_split, self.best_params, self.labels), total=len(self.best_params), desc=f'Training {self.regressor.__name__}')
         for y, params, label in pbar:
             pbar.set_description(f'Training {self.regressor.__name__} for {label}')
             print(f'Shape of target: {y.shape}')
@@ -138,7 +138,7 @@ class GradientBoostingPipeline:
         self.x, self.y_split, self.x_test = self.loader.load(split_labels=True)
         print(type(self.y_split))
 
-        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.labels), desc=f'Optimizing {self.regressor.__name__}', file=sys.stdout, dynamic_ncols=True)
+        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.labels), desc=f'Optimizing {self.regressor.__name__}')
         for value, label in pbar:
             pbar.set_description(f'Optimizing {self.regressor.__name__} for {label}')
             self.y = value
