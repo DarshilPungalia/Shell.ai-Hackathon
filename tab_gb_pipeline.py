@@ -18,7 +18,8 @@ import optuna
 warnings.filterwarnings(action='ignore')
 
 class TabPFNStackingPipeline:
-    def __init__(self, output_type: Literal['mean', 'median', 'mode'] = None, meta_model = None, combine_features: bool = False):
+    def __init__(self, output_type: Literal['mean', 'median', 'mode'] = None, meta_model = None, combine_features: bool = False, n_trials:int=20):
+        self.n_trials = n_trials
         self.meta_model = meta_model or XGBRegressor
         self.combine_features = combine_features
         self.output_type = output_type or 'mean'
@@ -134,7 +135,7 @@ class TabPFNStackingPipeline:
         params = self.get_params_for_trial(self.meta_model, trial)
         
         cv_scores = []
-        skf = KFold(n_splits=3, shuffle=True, random_state=42)
+        skf = KFold(n_splits=5, shuffle=True, random_state=42)
         
 
         for train_idx, val_idx in skf.split(self.trainData, self.y_train):
@@ -151,11 +152,10 @@ class TabPFNStackingPipeline:
         
         return np.mean(cv_scores)
     
-    def optimize(self, n_trials=50):
-        
+    def optimize(self):
         study = optuna.create_study(direction='minimize')
         print('Optimizing HyperParameter...')
-        study.optimize(self.objective, n_trials=n_trials)
+        study.optimize(self.objective, n_trials=self.n_trials)
         print(f'Best trial was with MAPE: {study.best_value}')
         
         return study.best_params
@@ -300,5 +300,5 @@ class TabPFNStackingPipeline:
 
 if __name__ == "__main__":   
     print("=== Training Individual TabPFN + XGB Models ===")
-    model1 = TabPFNStackingPipeline(meta_model=XGBRegressor)
+    model1 = TabPFNStackingPipeline(meta_model=XGBRegressor, n_trials=25)
     model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_xgb.csv'))
