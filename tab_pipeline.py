@@ -95,7 +95,7 @@ class TabPFNPipeline:
             full = model.predict(self.x, output_type='full')
             quantiles.append(self.combine_full_features(full))
             test_full = model.predict(self.x_test, output_type='full')
-            test_quantiles.append(test_full)
+            test_quantiles.append(self.combine_full_features(test_full))
         
         return quantiles, self.y_split, test_quantiles
 
