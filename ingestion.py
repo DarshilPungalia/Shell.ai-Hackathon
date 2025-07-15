@@ -2,6 +2,7 @@ import pandas as pd
 from sklearn.preprocessing import PowerTransformer
 from sdv.single_table import GaussianCopulaSynthesizer
 from sdv.metadata import SingleTableMetadata
+from sklearn.decomposition import KernelPCA
 
 
 class DataFrameLoader:
@@ -10,6 +11,7 @@ class DataFrameLoader:
         self.testData = pd.read_csv(r'dataset\test.csv')
         self.labels = ['BlendProperty1', 'BlendProperty2', 'BlendProperty3', 'BlendProperty4', 'BlendProperty5', 
                        'BlendProperty6', 'BlendProperty7', 'BlendProperty8', 'BlendProperty9','BlendProperty10']
+        self.pca = KernelPCA(n_components=10, kernel='rbf')
         
     @staticmethod
     def unskew(labels):
@@ -28,13 +30,36 @@ class DataFrameLoader:
         synthesizer.fit(dataframe)
 
         return synthesizer.sample(no_of_samples)
+    
+    def reduce_dims(self, df, reduce_test:bool = False):
+        print('Reducing Feature Dimnesions')
+        df_in = df.copy()
+        reduce_columns = [f'Component{i}_Property{j}' for i in range(1, 6) for j in range(1, 11)]
+        x = df_in[reduce_columns]
+        df_in.drop(columns=reduce_columns, inplace=True)
 
-    def load(self, split_labels:bool = False, add_synthetic:bool = False):
+        if reduce_test:
+            x_transformed = self.pca.transform(x)
+            df_in[[f'Component_Property{i}' for i in range(10)]] = x_transformed
+
+            return df_in
+        
+        x_transformed = self.pca.fit_transform(x)
+
+        df_in[[f'Component_Property{i}' for i in range(10)]] = x_transformed
+
+        return df_in
+
+    def load(self, split_labels:bool = False, add_synthetic:bool = False, reduce_dims:bool = False):
         print('Loading data...')
         combinedData = self.trainData
         if add_synthetic:
             synData  = self.generate_synthetic_data(self.trainData)
             combinedData = pd.concat([self.trainData, synData], axis=0, ignore_index=True)
+        
+        if reduce_dims:
+            combinedData = self.reduce_dims(combinedData)
+            self.testData = self.reduce_dims(self.testData, reduce_test=True)
 
         self.X = combinedData.drop(columns=self.labels).to_numpy()
         self.Y = combinedData[self.labels]
