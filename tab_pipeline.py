@@ -72,6 +72,32 @@ class TabPFNPipeline:
         print(f'Saving Predictions to {path}')
         submission.to_csv(path, index=False)
         print('Predictions Saved')
+    
+    @staticmethod
+    def combine_full_features(full_preds:dict):
+        quantile_features = []
+        
+        for q_pred in full_preds['quantiles']:
+            quantile_features.append(q_pred.reshape(-1, 1))
+        
+        # Add mean, median, mode predictions
+        quantile_features.append(full_preds['mean'].reshape(-1, 1))
+        quantile_features.append(full_preds['median'].reshape(-1, 1))
+        quantile_features.append(full_preds['mode'].reshape(-1, 1))
+        
+        return np.hstack(quantile_features)
+    
+    def get_full_features(self) ->tuple[list[np.ndarray], list | np.ndarray ,list[np.ndarray]]:
+        quantiles = []
+        test_quantiles = []
+
+        for model in self.models:
+            full = model.predict(self.x, output_type='full')
+            quantiles.append(self.combine_full_features(full))
+            test_full = model.predict(self.x_test, output_type='full')
+            test_quantiles.append(test_full)
+        
+        return quantiles, self.y_split, test_quantiles
 
 
 class TabPFNChainsPipeline:
