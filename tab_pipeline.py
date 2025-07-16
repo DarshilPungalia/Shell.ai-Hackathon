@@ -31,25 +31,19 @@ class TabPFNPipeline:
 
 
     def train(self):
-        self.x, self.y_split, self.x_test = self.loader.load(split_labels=True)
-        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.y_split), desc=f'Training {self.regressor.__name__}')
+        self.x, self.y_split, self.x_test = self.loader.load(split_labels=True, add_features=True)
+        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.y_split), desc=f'Training {self.regressor.__name__}', dynamic_ncols=True)
         for y, label in pbar:
             pbar.set_description(f'Training {self.regressor.__name__} for {label}')
-            print(f'Shape of target: {y.shape}')
 
             x_train, x_val, y_train, y_val = train_test_split(self.x, y, test_size=0.2, random_state=69)
 
-            print(f'Shape of x_train: {x_train.shape}')
-            print(f'Shape of x_val: {x_val.shape}')
-            print(f'Shape of y_train: {y_train.shape}')
-            print(f'Shape of y_val: {y_val.shape}')
-
-            model = self.regressor(device='auto', model_path=r'models\models--Prior-Labs--TabPFN-v2-reg\snapshots\213f8e38ec399a2a385fa46cab6f22b95cd90de8\tabpfn-v2-regressor.ckpt')
+            model = self.regressor(device='auto', model_path=self.path)
             model.fit(x_train, y_train)
 
             val_preds = model.predict(x_val, output_type=self.output_type)
-            print(f'MAPE for {label}: {mape(y_val, val_preds)}')
-            print(f'R2 Score for {label}: {r2(y_val, val_preds)}')
+            pbar.write(f'MAPE for {label}: {mape(y_val, val_preds)}')
+            pbar.write(f'R2 Score for {label}: {r2(y_val, val_preds)}')
 
             self.models.append(model)
         
@@ -57,7 +51,7 @@ class TabPFNPipeline:
 
     def get_submission(self, path):
         preds = []
-        for model in tqdm(self.models, desc=f'Generating Predictions for each Blend using {self.output_type}', total=len(self.models)):
+        for model in tqdm(self.models, desc=f'Generating Predictions for each Blend using {self.output_type}', total=len(self.models), dynamic_ncols=True):
             pred = model.predict(self.x_test, output_type = self.output_type)
             preds.append(pred)
         

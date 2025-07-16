@@ -161,27 +161,20 @@ class TabPFNStackingPipeline:
         return study.best_params
 
     def train(self):
-        self.x, self.y_split, self.x_test = self.loader.load(split_labels=True)
+        self.x, self.y_split, self.x_test = self.loader.load(split_labels=True, add_features=True)
         
         print(f"Training pipeline with TabPFN full predictions")
         print(f"This will create 12 features per target (9 quantiles + mean + median + mode)")
         
-        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.y_split), desc='Training TabPFN + Meta Model')
+        pbar = tqdm(zip(self.y_split, self.labels), total=len(self.y_split), desc='Training TabPFN + Meta Model', dynamic_ncols=True)
         
         for y, label in pbar:
             pbar.set_description(f'Training TabPFN + Meta Model for {label}')
-            print(f'\n=== Training for {label} ===')
-            print(f'Shape of target: {y.shape}')
 
             x_train, x_val, self.y_train, y_val = train_test_split(self.x, y, test_size=0.2, random_state=69)
 
-            print(f'Shape of x_train: {x_train.shape}')
-            print(f'Shape of x_val: {x_val.shape}')
-            print(f'Shape of y_train: {self.y_train.shape}')
-            print(f'Shape of y_val: {y_val.shape}')
-
             # Step 1: Train TabPFN model
-            print("Step 1: Training TabPFN model...")
+            pbar.write("Step 1: Training TabPFN model...")
             tabpfn_model = self.regressor(
                 device='auto', 
                 model_path=self.path
@@ -190,21 +183,21 @@ class TabPFNStackingPipeline:
             self.tabpfn_models.append(tabpfn_model)
 
             # Step 2: Generate quantile features for training meta
-            print("Step 2: Generating quantile features...")
+            pbar.write("Step 2: Generating quantile features...")
             train_quantile_features = self.get_quantile_features(tabpfn_model, x_train)
             val_quantile_features = self.get_quantile_features(tabpfn_model, x_val)
 
             self.trainData = train_quantile_features if not self.combine_features else np.hstack([x_train, train_quantile_features])
             valData = val_quantile_features if not self.combine_features else np.hstack([x_val, val_quantile_features])
             
-            print(f'Train quantile features shape: {self.trainData.shape}')
-            print(f'Val quantile features shape: {valData.shape}')
+            pbar.write(f'Train quantile features shape: {self.trainData.shape}')
+            pbar.write(f'Val quantile features shape: {valData.shape}')
 
             if not self.meta_model == TabPFNRegressor:
-                print("Step 3: Optimizing Meta Model model...")
+                pbar.write("Step 3: Optimizing Meta Model model...")
                 params = self.optimize()
 
-                print("Step 4: Training Meta Model model...")
+                pbar.write("Step 4: Training Meta Model model...")
                 model = self.meta_model(
                     **self.config,
                     **params
@@ -216,11 +209,11 @@ class TabPFNStackingPipeline:
                 
                 self.meta_models.append(model)
 
-                print("Step 5: Validating combined model...")
+                pbar.write("Step 5: Validating combined model...")
                 val_preds = model.predict(valData)
             
             else:
-                print("Step 3: Training Meta Model")
+                pbar.write("Step 3: Training Meta Model")
                 model = self.regressor(device='auto', 
                                        model_path=self.path
                                     )
@@ -231,28 +224,28 @@ class TabPFNStackingPipeline:
                 
                 self.meta_models.append(model)
 
-                print("Step 4: Validating combined model...")
+                pbar.write("Step 4: Validating combined model...")
                 val_preds = model.predict(valData)
             
             val_mape = mape(y_val, val_preds)
             val_r2 = r2(y_val, val_preds)
             
-            print(f'Combined Model MAPE for {label}: {val_mape:.4f}')
-            print(f'Combined Model R2 for {label}: {val_r2:.4f}')
+            pbar.write(f'Combined Model MAPE for {label}: {val_mape:.4f}')
+            pbar.write(f'Combined Model R2 for {label}: {val_r2:.4f}')
             
             # Compare with TabPFN-only performance
             tabpfn_val_preds = tabpfn_model.predict(x_val, output_type=self.output_type)
             tabpfn_mape = mape(y_val, tabpfn_val_preds)
             tabpfn_r2 = r2(y_val, tabpfn_val_preds)
             
-            print(f'TabPFN-only MAPE for {label}: {tabpfn_mape:.4f}')
-            print(f'TabPFN-only R2 for {label}: {tabpfn_r2:.4f}')
+            pbar.write(f'TabPFN-only MAPE for {label}: {tabpfn_mape:.4f}')
+            pbar.write(f'TabPFN-only R2 for {label}: {tabpfn_r2:.4f}')
             
             comparison_mape = ((tabpfn_mape - val_mape) / tabpfn_mape) * 100
             comparison_r2 = ((val_r2 - tabpfn_r2) / abs(tabpfn_r2)) * 100
             
-            print(f'MAPE comparison: {comparison_mape:.2f}%')
-            print(f'R2 comparison: {comparison_r2:.2f}%')
+            pbar.write(f'MAPE comparison: {comparison_mape:.2f}%')
+            pbar.write(f'R2 comparison: {comparison_r2:.2f}%')
         
         print(f'\nFinished Training {len(self.tabpfn_models)} TabPFN models and {len(self.meta_models)} Meta Model models')
 
@@ -263,7 +256,7 @@ class TabPFNStackingPipeline:
         
         pbar = tqdm(zip(self.tabpfn_models, self.meta_models, self.labels), 
                    total=len(self.tabpfn_models), 
-                   desc='Generating final predictions')
+                   desc='Generating final predictions', dynamic_ncols=True)
         
         for tabpfn_model, model, label in pbar:
             pbar.set_description(f'Predicting {label}')
@@ -299,6 +292,6 @@ class TabPFNStackingPipeline:
 
 
 if __name__ == "__main__":   
-    print("=== Training Individual TabPFN + XGB Models ===")
-    model1 = TabPFNStackingPipeline(meta_model=XGBRegressor, n_trials=25)
-    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_xgb.csv'))
+    print("=== Training Individual TabPFN + XGB Models with Full features===")
+    model1 = TabPFNStackingPipeline(meta_model=XGBRegressor, n_trials=50, combine_features=True)
+    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_xgb_full_features.csv'))
