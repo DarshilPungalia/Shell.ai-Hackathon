@@ -157,7 +157,7 @@ class DataFrameLoader:
 
     def load(self, split_labels:bool = False, add_synthetic:bool = False, reduce_dims:bool = False, add_features:bool = False):
         print('Loading data...')
-        combinedData = self.trainData
+        combinedData = self.trainData.drop(columns=self.labels)
         self.testData = self.testData.drop(columns=['ID'])
         if add_synthetic:
             synData  = self.generate_synthetic_data(self.trainData)
@@ -171,7 +171,7 @@ class DataFrameLoader:
             combinedData = self.reduce_dims(combinedData)
             self.testData = self.reduce_dims(self.testData, reduce_test=True)
         
-        self.X = combinedData.drop(columns=self.labels).to_numpy()
+        self.X = combinedData.to_numpy()
         self.Y = self.trainData[self.labels]
 
         self.Y, skew_transformer = self.unskew(self.Y)
