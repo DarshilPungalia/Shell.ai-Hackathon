@@ -64,10 +64,7 @@ class TabPFNStackingPipeline:
                     'loss_function': 'RMSE',
                     'random_seed': 12,
                     'verbose': 0
-                    }
-        elif model is TabPFNRegressor:
-            return None
-        
+                    }        
         else:
             raise ValueError(f'No meta model of type {model}')
 
@@ -193,40 +190,22 @@ class TabPFNStackingPipeline:
             pbar.write(f'Train quantile features shape: {self.trainData.shape}')
             pbar.write(f'Val quantile features shape: {valData.shape}')
 
-            if not self.meta_model == TabPFNRegressor:
-                pbar.write("Step 3: Optimizing Meta Model model...")
-                params = self.optimize()
+            pbar.write("Step 3: Optimizing Meta Model model...")
+            params = self.optimize()
 
-                pbar.write("Step 4: Training Meta Model model...")
-                model = self.meta_model(
-                    **self.config,
-                    **params
-                )
+            pbar.write("Step 4: Training Meta Model model...")
+            model = self.meta_model(
+                **self.config,
+                **params
+            )
 
-                model.fit(
-                    self.trainData, self.y_train
-                )
+            model.fit(
+                self.trainData, self.y_train
+            )
                 
-                self.meta_models.append(model)
-
-                pbar.write("Step 5: Validating combined model...")
-                val_preds = model.predict(valData)
-            
-            else:
-                pbar.write("Step 3: Training Meta Model")
-                model = self.regressor(device='auto', 
-                                       model_path=self.path
-                                    )
-            
-                model.fit(
-                    self.trainData, self.y_train
-                )
-                
-                self.meta_models.append(model)
-
-                pbar.write("Step 4: Validating combined model...")
-                val_preds = model.predict(valData)
-            
+            pbar.write("Step 5: Validating combined model...")
+            val_preds = model.predict(valData)
+                        
             val_mape = mape(y_val, val_preds)
             val_r2 = r2(y_val, val_preds)
             
@@ -243,6 +222,11 @@ class TabPFNStackingPipeline:
             
             comparison_mape = ((tabpfn_mape - val_mape) / tabpfn_mape) * 100
             comparison_r2 = ((val_r2 - tabpfn_r2) / abs(tabpfn_r2)) * 100
+
+            if comparison_mape > 0:
+                self.meta_models.append(model)
+            else:
+                self.meta_models.append(tabpfn_model)
             
             pbar.write(f'MAPE comparison: {comparison_mape:.2f}%')
             pbar.write(f'R2 comparison: {comparison_r2:.2f}%')
@@ -260,17 +244,17 @@ class TabPFNStackingPipeline:
         
         for tabpfn_model, model, label in pbar:
             pbar.set_description(f'Predicting {label}')
-            
-            # Generate quantile features for test set
-            test_quantile_features = self.get_quantile_features(tabpfn_model, self.x_test)
 
-            if self.combine_features:
-                testData = np.hstack([self.x_test, test_quantile_features])
+            if isinstance(model, TabPFNRegressor):
+                pred = model.predict(self.x_test)
+                preds.append(pred)          
+                  
             else:
-                testData = test_quantile_features
-            
-            # Make final prediction with Meta Model
-            pred = model.predict(testData) if not self.meta_model == TabPFNRegressor else model.predict(testData, output_type=self.output_type)
+                # Generate quantile features for test set
+                test_quantile_features = self.get_quantile_features(tabpfn_model, self.x_test)
+                testData = np.hstack([self.x_test, test_quantile_features]) if self.combine_features else test_quantile_features
+                pred = model.predict(testData) 
+
             preds.append(pred)
         
         preds = np.column_stack(preds)
