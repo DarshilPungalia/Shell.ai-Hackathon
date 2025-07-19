@@ -114,7 +114,7 @@ class DataFrameLoader:
                 new_features[f'Component{comp_num}_prop_mean']
             )
         
-        # 5. SYNERGY AND ANTAGONISM FEATURES        
+        '''# 4. SYNERGY AND ANTAGONISM FEATURES        
         for prop_num in range(1, 11):
             prop_cols = [f'Component{i}_Property{prop_num}' for i in range(1, 6)]
             total_prop_contribution = sum(df_engineered[fraction_cols[i]] * 
@@ -124,9 +124,9 @@ class DataFrameLoader:
                 new_features[f'Component{i+1}_Property{prop_num}_contribution_pct'] = (
                     df_engineered[fraction_cols[i]] * df_engineered[prop_cols[i]] / 
                     (total_prop_contribution + 1e-10)
-                )
+                )'''
         
-        # 7. BLEND COMPLEXITY FEATURES
+        # 5. BLEND COMPLEXITY FEATURES
         new_features['blend_complexity_score'] = (
             new_features['fraction_diversity'] * 
             new_features['num_active_components'] * 

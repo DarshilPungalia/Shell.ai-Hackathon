@@ -224,8 +224,10 @@ class TabPFNStackingPipeline:
             comparison_r2 = ((val_r2 - tabpfn_r2) / abs(tabpfn_r2)) * 100
 
             if comparison_mape > 0:
+                pbar.write(f'Would use Meta Model for predictions for {label}')
                 self.meta_models.append(model)
             else:
+                pbar.write(f'Would use TabPFN for predictions for {label}')
                 self.meta_models.append(tabpfn_model)
             
             pbar.write(f'MAPE comparison: {comparison_mape:.2f}%')
@@ -246,8 +248,7 @@ class TabPFNStackingPipeline:
             pbar.set_description(f'Predicting {label}')
 
             if isinstance(model, TabPFNRegressor):
-                pred = model.predict(self.x_test)
-                preds.append(pred)          
+                pred = model.predict(self.x_test, output_type=self.output_type)
                   
             else:
                 # Generate quantile features for test set
@@ -277,5 +278,5 @@ class TabPFNStackingPipeline:
 
 if __name__ == "__main__":   
     print("=== Training Individual TabPFN + XGB Models with Full features===")
-    model1 = TabPFNStackingPipeline(meta_model=XGBRegressor, n_trials=50, combine_features=True)
-    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_xgb_full_features.csv'))
+    model1 = TabPFNStackingPipeline(meta_model=LGBMRegressor, n_trials=100, combine_features=True)
+    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_light_full_features_best_model_for_prediction.csv'))
