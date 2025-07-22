@@ -114,33 +114,6 @@ class DataFrameLoader:
                 new_features[f'Component{comp_num}_prop_mean']
             )
         
-        '''# 4. SYNERGY AND ANTAGONISM FEATURES        
-        for prop_num in range(1, 11):
-            prop_cols = [f'Component{i}_Property{prop_num}' for i in range(1, 6)]
-            total_prop_contribution = sum(df_engineered[fraction_cols[i]] * 
-                                        df_engineered[prop_cols[i]] for i in range(5))
-            
-            for i in range(5):
-                new_features[f'Component{i+1}_Property{prop_num}_contribution_pct'] = (
-                    df_engineered[fraction_cols[i]] * df_engineered[prop_cols[i]] / 
-                    (total_prop_contribution + 1e-10)
-                )'''
-        
-        # 5. BLEND COMPLEXITY FEATURES
-        new_features['blend_complexity_score'] = (
-            new_features['fraction_diversity'] * 
-            new_features['num_active_components'] * 
-            np.mean([new_features[f'weighted_std_Property{i}'] for i in range(1, 11)], axis=0)
-        )
-        
-        property_similarities = []
-        for prop_num in range(1, 11):
-            prop_cols = [f'Component{i}_Property{prop_num}' for i in range(1, 6)]
-            prop_std = df_engineered[prop_cols].std(axis=1)
-            property_similarities.append(prop_std)
-        
-        new_features['blend_homogeneity'] = 1 / (1 + np.mean(property_similarities, axis=0))
-
         # COMBINE ALL FEATURES
         new_features_df = pd.DataFrame(new_features, index=df_engineered.index)
         df_engineered = pd.concat([df_engineered, new_features_df], axis=1)

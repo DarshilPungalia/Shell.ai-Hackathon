@@ -101,16 +101,16 @@ class TabPFNStackingPipeline:
 
         elif model is LGBMRegressor:
             return {
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
-                'max_depth': trial.suggest_int('max_depth', 3, 8),
-                'num_leaves': trial.suggest_int('num_leaves', 8, 64),
-                'min_child_samples': trial.suggest_int('min_child_samples', 2, 15),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'reg_alpha': trial.suggest_float('reg_alpha', 0.0, 10.0),
-                'reg_lambda': trial.suggest_float('reg_lambda', 0.0, 10.0)
-            }
+                    'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),  
+                    'n_estimators': trial.suggest_int('n_estimators', 300, 1500),  
+                    'max_depth': trial.suggest_int('max_depth', 3, 7),  
+                    'num_leaves': trial.suggest_int('num_leaves', 4, 48), 
+                    'min_child_samples': trial.suggest_int('min_child_samples', 10, 50),  
+                    'subsample': trial.suggest_float('subsample', 0.5, 0.9),  
+                    'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 0.9),  
+                    'reg_alpha': trial.suggest_float('reg_alpha', 1.0, 20.0), 
+                    'reg_lambda': trial.suggest_float('reg_lambda', 1.0, 20.0)  
+                }
 
         elif model is CatBoostRegressor:
             return {
@@ -279,4 +279,4 @@ class TabPFNStackingPipeline:
 if __name__ == "__main__":   
     print("=== Training Individual TabPFN + XGB Models with Full features===")
     model1 = TabPFNStackingPipeline(meta_model=LGBMRegressor, n_trials=100, combine_features=True)
-    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_light_full_features_best_model_for_prediction.csv'))
+    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_light_best_model_for_prediction.csv'))
