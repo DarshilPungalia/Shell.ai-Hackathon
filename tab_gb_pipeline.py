@@ -13,6 +13,7 @@ import warnings
 from xgboost import XGBRegressor 
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 import optuna
 
 warnings.filterwarnings(action='ignore')
@@ -64,7 +65,21 @@ class TabPFNStackingPipeline:
                     'loss_function': 'RMSE',
                     'random_seed': 12,
                     'verbose': 0
-                    }        
+                    }    
+        elif model is HistGradientBoostingRegressor:
+            return {
+                    'random_state': 12,
+                    'loss': 'squared_error',
+                    'verbose': 0,
+                    'early_stopping': True,
+                    'scoring': 'neg_root_mean_squared_error'
+                }    
+        elif model is RandomForestRegressor:
+            return {
+                    'random_state': 12,
+                    'n_jobs': -1,
+                    'verbose': 0
+                }
         else:
             raise ValueError(f'No meta model of type {model}')
 
@@ -90,14 +105,14 @@ class TabPFNStackingPipeline:
     def get_params_for_trial(model, trial):
         if model is XGBRegressor:
             return {
-                'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
-                'max_depth': trial.suggest_int('max_depth', 3, 10),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'reg_alpha': trial.suggest_float('reg_alpha', 0, 10),
-                'reg_lambda': trial.suggest_float('reg_lambda', 0, 10)
-            }
+                    'n_estimators': trial.suggest_int('n_estimators', 100, 1000),
+                    'max_depth': trial.suggest_int('max_depth', 3, 10),
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                    'subsample': trial.suggest_float('subsample', 0.6, 1.0),
+                    'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                    'reg_alpha': trial.suggest_float('reg_alpha', 0, 10),
+                    'reg_lambda': trial.suggest_float('reg_lambda', 0, 10)
+                }
 
         elif model is LGBMRegressor:
             return {
@@ -114,16 +129,37 @@ class TabPFNStackingPipeline:
 
         elif model is CatBoostRegressor:
             return {
-                'iterations': trial.suggest_int('iterations', 300, 1000),
-                'depth': trial.suggest_int('depth', 4, 10),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2, log=True),
-                'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 3.0, 100.0, log=True),
-                'random_strength': trial.suggest_float('random_strength', 1e-9, 10.0, log=True),
-                'bagging_temperature': trial.suggest_float('bagging_temperature', 0.0, 1.0),
-                'border_count': trial.suggest_int('border_count', 32, 255),
-                'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise']),
-                'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
-            }
+                    'iterations': trial.suggest_int('iterations', 300, 1000),
+                    'depth': trial.suggest_int('depth', 4, 10),
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2, log=True),
+                    'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 3.0, 100.0, log=True),
+                    'random_strength': trial.suggest_float('random_strength', 1e-9, 10.0, log=True),
+                    'bagging_temperature': trial.suggest_float('bagging_temperature', 0.0, 1.0),
+                    'border_count': trial.suggest_int('border_count', 32, 255),
+                    'grow_policy': trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise']),
+                    'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 100),
+                }
+        
+        elif model is HistGradientBoostingRegressor:
+            return {
+                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+                    'max_iter': trial.suggest_int('max_iter', 100, 1000),
+                    'max_depth': trial.suggest_int('max_depth', 3, 16),
+                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 50),
+                    'l2_regularization': trial.suggest_float('l2_regularization', 1e-4, 100.0, log=True)
+                }
+        
+        elif model is RandomForestRegressor:
+            return {
+                    'n_estimators': trial.suggest_int('n_estimators', 300, 1000),
+                    'max_depth': trial.suggest_int('max_depth', 4, 20),
+                    'min_samples_split': trial.suggest_int('min_samples_split', 2, 20),
+                    'min_samples_leaf': trial.suggest_int('min_samples_leaf', 1, 20),
+                    'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', None]),
+                    'bootstrap': trial.suggest_categorical('bootstrap', [True, False]),
+                    'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 50, 1000),
+                    'criterion': trial.suggest_categorical('criterion', ['squared_error', 'absolute_error']),
+                }
 
         else:
             raise ValueError("Unsupported regressor")
@@ -278,5 +314,5 @@ class TabPFNStackingPipeline:
 
 if __name__ == "__main__":   
     print("=== Training Individual TabPFN + XGB Models with Full features===")
-    model1 = TabPFNStackingPipeline(meta_model=LGBMRegressor, n_trials=100, combine_features=True)
-    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_light_best_model_for_prediction.csv'))
+    model1 = TabPFNStackingPipeline(meta_model=RandomForestRegressor, n_trials=20, combine_features=True)
+    model1.get_submission(os.path.join('submissions', 'tabpfn_quantile_hist_best_model_for_prediction.csv'))
