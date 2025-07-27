@@ -189,5 +189,5 @@ class GradientBoostingPipeline:
 
 
 if __name__ == "__main__":
-    model = GradientBoostingPipeline(regressor=CatBoostRegressor)
+    model = GradientBoostingPipeline(regressor=CatBoostRegressor, n_trials=50)
     model.get_submission(os.path.join('submissions', 'cat_dist.csv'))
