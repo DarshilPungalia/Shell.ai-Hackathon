@@ -2,3 +2,4 @@ catboost_info
 models
 __pycache__/*.pyc
 submissions
+a.ipynb
