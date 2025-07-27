@@ -168,11 +168,11 @@ Each pipeline generates:
 - **MAPE** (Mean Absolute Percentage Error)
 - **R²** (Coefficient of determination)
 - **Training time**
-- **Memory usage** (for applicable models)
 
 ## 📁 File Structure
 
 ``` bash
+├── eda.ipynb
 ├── ingestion.py             
 ├── tab_pipeline.py           
 ├── tab_gb_pipeline.py        
